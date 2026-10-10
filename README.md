@@ -59,8 +59,13 @@ Two compression layers, applied to every record:
 
 1. **Strip images** — every `data:image` / base64 blob becomes `[image stripped, was N KB]`
 2. **Truncate tool traffic** — tool outputs above 400 chars are cut to 200 + a size note; tool call arguments above 600 chars are cut to 300. Message records are **never truncated** — the conversation stays fully readable.
+3. **Strip reasoning text** (`--deep`, recommended) — model thinking text hides in *three* places, none of which are conversation content: `message.content[].type=="reasoning"` blocks, nested `providerData.reasoning`, and `rawContent` fields. Found in the field: 1.41MB + 1.19MB per session on WorkBuddy, 428 occurrences in one 15.7MB file.
 
 Optional **sanitization** (`--sanitize`): rewrite `C:\Users\<name>\...` / `/Users/<name>/...` paths to `~` so a session file can be shared as a bug report without leaking your username. 910 rewrites on our 355MB test file, zero afterwards.
+
+### CRLF safety (Layer 4)
+
+On Windows, **a large share of session files use CRLF line endings** (25 of 39 large files on our test machine). Naively re-joining lines with `"\n".join(...)` produces mixed line endings and corrupted files — we learned this the hard way (first rewrite broke 1,903 lines). The engine now detects the original line-ending style per file and restores it on write, verified: CRLF in → CRLF out, 0 bare LF.
 
 ## Safety model
 
