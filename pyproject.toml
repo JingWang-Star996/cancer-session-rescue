@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cancer-session-rescue"
+version = "0.1.0"
+description = "Diagnose and rescue bloated agent session logs (WorkBuddy / Codex CLI / any JSONL harness)"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [{name = "Jing (Whale) + WorkBuddy Agent"}]
+keywords = ["agent", "codex", "session", "jsonl", "context-window", "maintenance"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development :: Maintenance",
+]
+
+[project.scripts]
+csr = "cancer_session_rescue.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
