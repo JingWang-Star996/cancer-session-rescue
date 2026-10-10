@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.slim2
+*.sliming
+*.replaced-*
+*.bak-*
+report*.txt
+.env
