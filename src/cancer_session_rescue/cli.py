@@ -71,11 +71,13 @@ def cmd_slim(args):
         print(f"脱敏规则 {len(rules)} 条（用户名 -> ~ 等）")
 
     tmp = src + ".sliming"
-    stats = slim_stream(src, tmp, adapter, sanitizer_rules=rules, keep_chars=args.keep_chars)
+    stats = slim_stream(src, tmp, adapter, sanitizer_rules=rules, keep_chars=args.keep_chars,
+                        deep=args.deep)
     print(f"行数: {stats['lines']} (坏行 {stats['bad_lines']})")
     print(f"体积: {human(stats['in_bytes'])} -> {human(stats['out_bytes'])}  "
           f"压缩率 {100 - stats['out_bytes']*100//max(stats['in_bytes'],1)}%")
     print(f"剥图 {stats['img']} 处 | 截断工具输出 {stats['cut_outputs']} 条 | 截断调用 {stats['cut_calls']} 条"
+          + (f" | 剥推理 {stats.get('reasoning', 0)} 处" if args.deep else "")
           + (f" | 脱敏 {stats['sanitized']} 处" if args.sanitize else ""))
 
     if not args.apply:
@@ -140,7 +142,8 @@ def cmd_slim_dir(args):
     for i, (s, src) in enumerate(targets, 1):
         try:
             tmp = src + ".sliming"
-            st = slim_stream(src, tmp, adapter, sanitizer_rules=rules, keep_chars=args.keep_chars)
+            st = slim_stream(src, tmp, adapter, sanitizer_rules=rules, keep_chars=args.keep_chars,
+                             deep=args.deep)
         except Exception as e:
             print(f"{i:3}. ❌ {os.path.basename(src)[:50]}: {e}")
             continue
@@ -200,6 +203,7 @@ def main():
     p.add_argument("--apply", action="store_true")
     p.add_argument("--backup", action="store_true")
     p.add_argument("--sanitize", action="store_true", help="脱敏用户名路径")
+    p.add_argument("--deep", action="store_true", help="剥离推理全文/rawContent（Layer 3，推荐）")
     p.add_argument("--keep-chars", type=int, default=TOOL_OUT_KEEP)
     p.set_defaults(func=cmd_slim)
 
@@ -209,6 +213,7 @@ def main():
     p.add_argument("--apply", action="store_true")
     p.add_argument("--backup", action="store_true")
     p.add_argument("--sanitize", action="store_true")
+    p.add_argument("--deep", action="store_true", help="剥离推理全文/rawContent（Layer 3）")
     p.add_argument("--min-mb", type=float, default=2.0)
     p.add_argument("--keep-chars", type=int, default=TOOL_OUT_KEEP)
     p.set_defaults(func=cmd_slim_dir)
