@@ -94,7 +94,7 @@ Writing a new adapter is ~60 lines: implement `classify()`, `truncate_tool_recor
 | WorkBuddy | 37 (11 cancer-grade ≥10MB) | 374 MB | 111 MB | 263 MB |
 | Codex | 1 (worst single file) | 355.6 MB | 34.0 MB | −91% |
 
-The 90.9MB WorkBuddy session contained 390 base64 images and ~90MB of Playwright verification output. The 355MB Codex rollout contained 667 images and 890 oversized tool calls.
+The 90.9MB WorkBuddy session contained 390 base64 images and ~90MB of Playwright verification output. The 355MB Codex rollout contained 667 images and 890 oversized tool calls. With v0.2.0 `--deep`, the 90.9MB session drops further to **4.4MB (96%)** — the reasoning strip alone removed 68 blocks the two-layer version couldn't touch.
 
 ## Field manual: the habits that prevent cancer sessions
 
