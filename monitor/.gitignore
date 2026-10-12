@@ -1,0 +1,7 @@
+.build-venv/
+build/
+build-agent/
+dist/
+__pycache__/
+*.spec
+qa/

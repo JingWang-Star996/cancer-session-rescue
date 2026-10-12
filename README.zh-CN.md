@@ -1,119 +1,69 @@
-# cancer-session-rescue
+# Codex 会话监控 1.0 与 cancer-session-rescue
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-**诊断并抢救"癌症会话"——膨胀到数百 MB、一打开就卡死应用的 agent 对话记录。**
+**Codex 会话监控 1.0** 是查看本机 Codex 会话的 Windows 桌面程序，可观察文件增长、进行有界诊断，并生成供人工或 Agent 审阅的任务包。它不改写会话日志、不执行修复、不自动调用模型，也不重启 Codex。
 
-适用于任何以 JSONL 存储会话的 agent 框架。内置 **WorkBuddy** 和 **OpenAI Codex CLI/Desktop** 适配器，另有启发式 `generic` 适配器兜底其余框架。
+本仓库还包含原有的 **cancer-session-rescue（`csr`）v0.2.0** 命令行工具，用于 WorkBuddy、Codex 和通用 JSONL 日志。它的独立命令在明确使用 `--apply` 时可以改写文件；这不是监控器 1.0 的能力。
 
-```
-修复前:  rollout-xxx.jsonl   355.6 MB   ← 打开即卡死
-修复后:    同一文件           34.0 MB   ← 正常打开，对话完整
-```
+## 下载 Windows 版监控器
 
-## 会话为什么会癌变
+前往 [Monitor 1.0 Release](https://github.com/JingWang-Star996/cancer-session-rescue/releases/tag/monitor-v1.0.0) 下载：
 
-长会话会不断堆积机器产物，每次重新打开会话时全部灌进模型上下文：
+| 文件 | 用途 |
+|---|---|
+| `CodexSessionMonitor-1.0.0-windows-x64.zip` | 免安装便携包，含桌面程序与 `codex-monitor-agent.exe`；解压即可运行，无需安装 Python。 |
+| `CodexSessionMonitor-1.0.0.exe` | 独立的桌面图形程序；需要 Agent CLI 时请下载 ZIP。 |
+| `SHA256SUMS.txt` | 用于核对下载文件的 SHA-256。 |
 
-| 毒素 | 典型占比 | 后果 |
-|---|---|---|
-| base64 截图 | 视觉类工作流中占 60–90% | 多模态上下文爆炸 |
-| 冗长工具输出（验证循环、长命令回显） | 10–90% | 持续挤占上下文窗口 |
-| 反复"打补丁→修复→验证"循环 | — | 以上两种叠加恶化 |
-
-而真正的人机对话通常**不到文件体积的 5%**。
-
-## 安装
-
-```bash
-pip install git+https://github.com/<you>/cancer-session-rescue.git
-# 或本地克隆后：
-pip install -e .
-```
-
-Python 3.8+，零第三方依赖。
+支持 Windows x64。将 ZIP 解压到可写文件夹，运行其中的图形程序；独立 EXE 可直接运行。程序优先读取 `CODEX_HOME`，否则使用当前用户的 `.codex` 目录。另见[中文版](docs/monitor-1.0-release.zh-CN.md)与[英文版](docs/monitor-1.0-release.md)发布说明。
 
 ## 快速上手
 
-```bash
-# 1. 体检：找出癌症会话
-csr triage codex            # 扫描 ~/.codex/sessions 与 ~/.codex/archived_sessions
-csr triage workbuddy        # 扫描 ~/.workbuddy/projects
-csr triage generic --dir /任意/jsonl/目录
+1. 打开桌面程序。默认显示最近 24 小时活动的未归档会话，每页 100 个；可切换全部会话并纳入已归档会话。
+2. 选中会话，查看文件体积、近期增长和详情。“诊断与优化”会读取有界证据并生成可复制的 Agent 任务包；它不会自动修复。
+3. 导出或分享前，可开启隐私模式以隐藏身份和路径。CSV 导出须选 Codex home 之外的新文件名，不覆盖已有文件。匿名任务包无法直接定位原会话；如需 Agent 处理，须另行提供目标。
 
-# 2. 压缩单个会话（默认 dry-run，不写任何东西）
-csr slim codex ~/.codex/sessions/2026/07/15/rollout-xxx.jsonl --sanitize
+采样默认每 5 秒一次，可设为 2–60 秒；目录巡检默认每 60 秒一次，可设为 30–600 秒。所有会话每轮共用 2 MiB JSONL 读取预算，检查最多 32 个近期会话、另加所选会话，并轮转最多 64 个旧会话；检测到变化的旧会话可临时提高优先级。最小化后采样间隔至少 30 秒。旧会话变化可能要等轮转或巡检后才出现。文件字节和图片估算值不等于模型上下文 Token、账户用量或账单。
 
-# 3. 确认无误后正式执行（原文件自动改名保留）
-csr slim codex rollout-xxx.jsonl --apply --sanitize
+## Agent 命令行
 
-# 4. 或一键批量压缩目录下所有 ≥2MB 的会话
-csr slim-dir codex --apply --sanitize
+ZIP 内含独立的 UTF-8 JSON 命令行程序。在解压目录打开 PowerShell：
+
+```powershell
+.\codex-monitor-agent.exe capabilities
+.\codex-monitor-agent.exe list --privacy --page 1 --limit 100
+.\codex-monitor-agent.exe diagnose --session '<会话UUID>' --private --output .\diagnosis.json
+.\codex-monitor-agent.exe plan --session '<会话UUID>' --privacy --output .\plan.json
 ```
 
-**安全设计**：压缩结果先逐行 JSON 校验，通过后才替换原文件；校验失败则什么都不改。原文件一律保留为 `*.replaced-<时间戳>`（加 `--backup` 另存 `*.bak-*MB`）。
+请将带引号的占位符替换为真实会话 UUID。`--privacy` 输出匿名信息，`--private` 明确允许身份信息进入报告。CLI 不读取图形界面的隐私偏好。`--output` 必须指向 Codex home 之外的新文件，已有文件不会被覆盖。诊断最多读取目标日志开头 16 MiB 或运行 2 秒；覆盖不完整时，不能断言未扫描部分没有图片。字段、边界和源码运行方式见 [Agent API 说明](docs/monitor-agent-api.md)。
 
-## 工作原理
+## 原有 `csr` v0.2.0 CLI
 
-五层压缩，作用于每条记录：
+`csr` 是仓库原有的会话排查和瘦身工具。克隆仓库后可用 `pip install -e .` 安装（Python 3.8+），并用 `csr --help` 查看命令。
 
-1. **剥图**：所有 `data:image` / base64 大块 → `[image stripped, was N KB]`
-2. **清洗工具流量**：超过 400 字符的工具输出截断为前 200 字符 + 尺寸备注；超过 600 字符的调用参数截断为前 300。**消息类记录绝不截断**——对话永远完整可读。
-3. **剥离推理全文**（`--deep`，推荐）：模型 thinking 文本会藏在**三处**，且都不是对话内容——`message.content[]` 里 `type=="reasoning"` 的块、嵌套的 `providerData.reasoning`、以及 `rawContent` 字段。实战数据：WorkBuddy 单会话 1.41MB + 1.19MB，一个 15.7MB 文件里剥了 428 处。
+```bash
+csr triage codex
+csr triage workbuddy
+csr triage generic --dir /path/to/jsonl
+csr slim codex /path/to/rollout.jsonl --sanitize
+```
 
-可选**脱敏**（`--sanitize`）：把 `C:\Users\<用户名>\...`、`/Users/<用户名>/...` 重写为 `~`，让会话文件可以直接当 bug 报告分享而不泄露用户名。实测 355MB 文件中改写 910 处，改写后残留 0 处。
+原有 `csr` 工具的五项处理与保护机制如下：
 
-### CRLF 行尾安全（Layer 4）
+1. **剥离图片：**将符合条件的内嵌图片数据替换为体积标记。
+2. **截短工具流量：**缩短超长工具输出和调用参数，保留消息类记录。
+3. **可选剥离推理文本（`--deep`）：**移除对话正文以外的指定推理和原始内容字段。
+4. **保留换行风格：**重写 JSONL 时探测并保留原换行方式，包括 Windows CRLF。
+5. **可选路径脱敏（`--sanitize`）：**替换用户名路径；不能保证清除所有秘密。
 
-Windows 下**相当一部分会话文件是 CRLF 行尾**（我们机器上 39 个大文件里 25 个）。用 `"\n".join(...)` 重拼全文会产生混合行尾和坏行——我们实战踩过这个坑（第一次重写坏了 1903 行）。引擎现在按文件探测原始行尾风格，写出时还原：实测 CRLF 进 → CRLF 出，0 裸 LF。
+这些都属于 **`csr`**，不属于监控器。`csr slim` 默认 dry run；`csr slim ... --apply` 和 `csr slim-dir ... --apply` 是独立的写入操作。对重要会话使用前应检查源文件和备份行为。
 
-## 安全模型
+[提交 `44e68b0` 时的原 README](https://github.com/JingWang-Star996/cancer-session-rescue/blob/44e68b0/README.zh-CN.md) 保留了旧版案例与示例。其中的 `csr --apply` 示例只针对旧工具，不是监控器使用说明。
 
-| 保证 | 实现方式 |
-|---|---|
-| 原文件绝不销毁 | 先改名后替换，原文件保留为 `.replaced-*` |
-| 无静默损坏 | 替换前逐行解析校验，任何坏行立即中止 |
-| 不碰活跃会话 | 批量模式自动跳过 2 分钟内有写入的文件 |
-| 对话保真 | 工具截断层永不处理消息类记录 |
-| 先看后动 | `slim` 不带 `--apply` 不写出任何文件 |
+监控器任务包不授权或执行 `csr --apply`。任何后续修复都须独立核查当前 Codex 运行状态、会话状态、源文件与索引备份，并通过原生接口读回历史。监控器 1.0 没有生产日志改写命令。
 
-## 框架适配器
+## 源码与许可
 
-| 框架 | 状态 | 会话位置 | 说明 |
-|---|---|---|---|
-| **WorkBuddy** | 实战验证 | `~/.workbuddy/projects/**/*.jsonl` | 附带 `stop` 子命令，可强制停止运行中的会话 |
-| **Codex CLI/Desktop** | 实战验证 | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` | 处理 `response_item`/`payload.type` 嵌套、`custom_tool_call_output`、`compacted` 记录；`ordinal` 顺序保留，`codex resume` 不受影响 |
-| **generic** | 启发式 | 任意 `.jsonl` | 按类型名关键词分类，截断最长字符串字段 |
-
-写新适配器约 60 行：实现 `classify()`、`truncate_tool_record()`、`privacy_rules()` 即可，参考 `src/cancer_session_rescue/adapters.py`。
-
-## 实战战绩（2026-10，一台 Windows 机器）
-
-| 框架 | 处理文件数 | 修复前 | 修复后 | 释放 |
-|---|---|---|---|---|
-| WorkBuddy | 37 个（含 11 个 ≥10MB 癌症级） | 374 MB | 111 MB | 263 MB |
-| Codex | 1 个（单文件之王） | 355.6 MB | 34.0 MB | −91% |
-
-那个 90.9MB 的 WorkBuddy 会话含 390 张 base64 截图和约 90MB Playwright 验证输出；那个 355MB 的 Codex 会话含 667 张图和 890 条超长工具调用。
-
-## 野外手册：预防癌症会话的习惯
-
-1. **别让 agent 反复截图**——base64 是头号毒源。让它跑脚本输出文字结论，图你自己开浏览器看。
-2. **验证脚本先核对再跑循环**——有个会话就死在一个查不存在 DOM 元素的死循环里（"验证永不通过"式假卡死）。
-3. **会话变卡变笨及时换新**——带走的应该是结论摘要，不是整个历史。
-4. **先只读体检**——永远别为了"看一眼"而加载巨型会话；用 `csr triage`，它流式统计、不载入正文。
-
-## FAQ
-
-**压缩后 Codex 还能 resume 吗？**
-能——记录顺序（`ordinal`）和全部消息/推理记录原样保留，我们只瘦身工具流量的 payload，不动账本结构。已在 16,761 条记录的 rollout 上验证。
-
-**应用开着时能压缩吗？**
-批量模式自动跳过最近 2 分钟有修改的文件。单文件压缩请先关闭该会话——WorkBuddy 的 `stop` 子命令通过归档运行时注册表记录来释放文件句柄。
-
-**脱敏能处理密钥吗？**
-默认只重写用户名路径。要分享文件前，可在适配器的 `privacy_rules()` 里扩展 token/邮箱规则。
-
-## 许可
-
-MIT
+监控器源码在 [`monitor/`](monitor/)，原有 `csr` 源码在 [`src/cancer_session_rescue/`](src/cancer_session_rescue/)。另见 [Agent API](docs/monitor-agent-api.md) 和仓库 [LICENSE](LICENSE)。
