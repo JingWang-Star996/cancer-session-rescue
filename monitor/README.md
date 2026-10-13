@@ -1,43 +1,83 @@
-# Codex Session Monitor 1.0
+# Codex 会话监控 1.1.1
 
-[Download Windows release](https://github.com/JingWang-Star996/cancer-session-rescue/releases/tag/monitor-v1.0.0) · [Agent integration](../docs/monitor-agent-api.md) · [中文功能说明](CHANGELOG.md)
+从 [1.1.1 Release](https://github.com/JingWang-Star996/cancer-session-rescue/releases/tag/monitor-v1.1.1) 下载 Windows x64 便携包，解压到可写文件夹，双击 **Codex 会话监控.exe**，无需安装 Python。包内含独立 Agent 接口、说明和源码。已有桌面版本可继续从桌面启动。
 
-The Windows x64 portable ZIP includes a native dashboard and a standalone JSON CLI. Extract it, then open **Codex 会话监控.exe**. No Python installation is needed. The separate EXE download runs the dashboard; download the ZIP for the standalone Agent CLI and documentation.
+## 1.1：只留下你想看的读数
 
-## Monitor
+### 1.1.1：小窗也能看汇总
 
-- Recent sessions first; 100 rows per page, search/sort/filter and CSV export across all matching pages.
-- Sampling interval 2–60 seconds (default 5); catalog interval 30–600 seconds (default 60), applied without restarting.
-- Up to 32 recent files plus the selected file, and 64 rotating cold-file checks during a regular sample. Changed files may temporarily join the recent set.
-- A shared 2 MiB JSONL read budget per poll; cold histories are not all parsed on startup. Minimized windows sample no more often than every 30 seconds.
-- Pause/resume, anonymous display/export, separate archived and unarchived sizes, and bounded diagnosis with an Agent maintenance plan.
+简化模式新增「范围」下拉框：单会话、近 60 秒有输出（未归档）、最近 24 小时（未归档）、全部未归档、仅主会话（未归档）、仅子会话（未归档）、当前列表筛选、全目录（含归档）。范围选择会保存；切回单会话时保留原观察对象。
 
-File size is disk storage, not context tokens. The output rate is a 60-second average of observed logged token increments, not token streaming. Cold-session values can lag; unknown baselines show a dash. This tool never rewrites Codex logs or maintains pagination indexes automatically.
+「当前列表筛选」复用完整界面本次窗口的搜索、活动条件、子会话和归档选项，统计全部匹配结果，不受分页限制。简化模式直接使用同一份采样快照，不增加日志扫描。空集显示零；全未知显示 `—`；部分有值显示已知小计及覆盖数。缓存命中率只对输入和缓存都有效的会话计算 `总缓存输入 / 总输入`，不平均百分比。跨会话累计未消除共享历史，不代表账户账单；冷会话数据仍可能延迟。
 
-## Agent CLI
+- **可选 Token 记录**：打开「设置 → Token 与简化模式」，勾选「开启输入、缓存与累计 Token 记录」。默认关闭；开启后表格新增 60 秒输入、缓存输入、缓存命中率及累计已记录输入/输出/缓存列，可横向滚动或按表头排序。
+- **60 秒缓存命中率**是窗口内缓存输入 / 全部输入；缓存属于输入，不重复相加。字段缺失、无输入或无有效基线时显示 `—`。
+- **累计已记录**首次采用尾部最新账务累计，然后累加确认的增量。保存在 `%LOCALAPPDATA%/CodexSessionMonitor/usage.sqlite3`，重启可续记；关闭开关停止记录，已有记录保留。存储不含会话正文、标题或图片，只含会话 ID、计数及核对状态。
+- 有界尾读不能恢复以前的计数重置。重放、截断、替换、字段缺失或计数下降时保守建立基线并提示覆盖缺口；累计不是完整账单。过去 128 笔账务用于重放去重。冷会话未采样时显示未知，选中后优先检查。
+- **简化模式**：先在列表选中会话，点「简化模式」，设置中只勾选「60 秒输出」即可保留一个读数。也能选择体积、速率、输入、缓存和累计。小窗可从最近 100 个会话中切换，原选中的旧会话会保留；新会话不会自动抢走观察目标，重启后也会保留选择。
+- **窗口置顶**支持完整界面和简化小窗，选择自动保存。`Ctrl+M` 切换模式，`Ctrl+T` 切换置顶；隐私模式对两个界面都有效。
+- **小窗口优先展示会话列表**：缩短标题栏与工具栏，详情默认收起，窗口较小时隐藏概览卡片。点「展开详情」查看当前会话；更小窗口使用独立详情框。设置改为三个页签。
+
+说明：60 秒是统计窗口，采样仍由设置中的 2–60 秒间隔控制。日志在响应阶段结束时批量记账，读数会滞后；不是屏幕逐字输出速度。Agent CLI 保持只读 1.0 JSON schema，不暴露 GUI 的私有累计库。
+
+## 这次升级
+
+- 默认显示最近 24 小时、未归档的会话，每页 100 个。支持全目录搜索、排序、归档和子会话筛选。CSV 包含筛选命中的所有页。
+- 近期文件优先采样，历史文件按预算轮转。默认每 5 秒采样、60 秒巡检；设置支持 2–60 秒采样、30–600 秒巡检、每页 20–200 个，保存后立即生效。
+- 常规采样检查最近 32 个文件及所选会话，另轮转检查最多 64 个冷文件。发现冷文件变化会提升优先级，巡检时重新整理。
+- 所有会话合用每轮 2 MiB 日志读取预算，不再逐文件分配。闲置日志不反复解析，表格只更新当前页变化的单元格。
+- 支持暂停/继续；最小化后至少 30 秒采样，暂停期间保留快照。冷会话数据可能延迟至轮转检查或下一次目录巡检，选择后会优先检查。
+- 总体积明确拆分未归档与已归档，统计范围不随列表筛选变化。删除、归档移动、同一物理文件别名会在巡检时重新核对。
+- **诊断与优化**：检查选中会话，区分图片线索、符合条件的图片和读取覆盖，再生成可复制的 Agent 任务包。
+- **Agent 接入**：标准 JSON 命令、本机调用示例、优化流程和可配置 GitHub。
+
+## 日常操作
+
+1. 主页关注最近活动、体积、增长和提醒项。查找旧会话时切换“全部会话”，按需勾选“已归档”。
+2. 点击表头排序；Ctrl+F 搜索；F5 重新巡检目录。分页不会删除历史。
+3. 选中会话查看详情、复制路径、打开文件夹；点击“诊断与优化”，先诊断，再生成任务包。
+4. 设置中推荐采样 5 / 巡检 60 秒；更低负载可用 15 / 180 秒。
+5. 隐私模式匿名显示名称、ID 和路径；CSV、诊断与任务包随界面开关脱敏。开关记住上次选择，`--privacy` 可强制匿名启动。
+
+匿名任务包不能直接识别原会话，接收 Agent 需要你另行提供目标。关闭隐私后的报告含本机标识，应按私人文件处理。独立 CLI 使用自己的 `--privacy` / `--private` 参数，不读取界面隐私偏好。
+
+## 读数定义
+
+**文件体积**是 JSONL 磁盘字节，不等于模型上下文、内存、Token 或账单。`sessions` 包含未归档的历史会话，不表示都在运行。归档不等于压缩或删除。
+
+**输出 tok/s · 60s** 是近 60 秒观测到的 `output_tokens` 增量除以 60，包含推理输出，不包含输入或缓存输入。日志通常批量记录，读数会延迟，0 不能证明卡死。未建立可靠基线显示 **—**，不为填满读数而扫描全部历史。总速率仅覆盖已建立基线的会话。
+
+**增长 KiB/s** 按两次文件状态检查间的字节差和实际时间间隔计算。截断或替换后重建基线。冷文件增长是较长观察区间平均，不是瞬时速率。
+
+默认提醒为 100 MiB 黄色、500 MiB 红色、20 MiB/分钟增长、150 tok/s 输出。这些是可调观察阈值，不是官方故障标准。
+
+## Agent 接口
+
+在配套文件夹运行，无需 Python：
 
 ```powershell
 .\codex-monitor-agent.exe capabilities
 .\codex-monitor-agent.exe list --privacy --page 1 --limit 100
-.\codex-monitor-agent.exe diagnose --session '12345678-1234-1234-1234-1234567890ab' --private --output diagnosis.json
-.\codex-monitor-agent.exe plan --session '12345678-1234-1234-1234-1234567890ab' --private --output plan.json
+.\codex-monitor-agent.exe diagnose --session '<会话UUID>' --private --output diagnosis.json
+.\codex-monitor-agent.exe plan --session '<会话UUID>' --private --output plan.json
 ```
 
-Replace the example UUID with a real local session ID. Use `--codex-home 'path'` for a different data directory. UTF-8 JSON is written to stdout, or to a new file via `--output`; existing files and paths inside Codex home are rejected. `--private` allows identifying metadata; `--privacy` anonymizes it. CLI privacy flags are independent of the dashboard setting.
+其他数据目录加 `--codex-home '目录'`。报告使用新文件名，已有文件不覆盖，也不能写入 Codex 数据目录。完整协议见 `AGENT_API.md`，经验见 `optimization_guide.md`。
 
-Diagnosis reads at most the first 16 MiB or two seconds of a selected log. Partial coverage is explicit. Lexical image markers and validated image candidates are separate statistics; neither is a guarantee of reclaimable storage. Plans preserve the original task and require backups, stopped writers, all history segments, index coordination, rollback, and native readback. No `apply` command is provided.
+诊断最多读取目标开头 16 MiB / 2 秒，超大文件明确显示部分覆盖。词法线索不等于可安全替换图片，更不等于可释放空间。任务包整理了原目标保存、所有历史段识别、备份哈希、单会话卸载与停写、图片限定变换、分页索引事务、回滚演练及原生历史读回。
 
-## Run from source / build
+本版不提供直接覆盖 Codex 日志的 `apply`。具体维护需接收 Agent 核验当前宿主、目标和索引；监控器不自动调用模型、不发送消息、不重启 Codex。
 
-Python 3.11 with Tk is required for the dashboard. The standalone CLI uses only the standard library.
+## GitHub 与经验来源
 
-```powershell
-python app.py
-python agent_api.py capabilities
-python -B -m unittest test_monitor_core test_integration test_agent_api
-.\build.ps1
-```
+默认入口是 [cancer-session-rescue](https://github.com/JingWang-Star996/cancer-session-rescue)，可在设置中更改。监控器只读诊断与旧 `csr --apply` 的行为不同，应先查看本版本能力清单。当前版本的下载与校验值见对应 Release 附件。
 
-`build.ps1` creates a local build environment if absent and installs the pinned build dependency. Executables are produced in `dist/`. The monitor is independent of the existing `csr` v0.2.0 command; its version and safety boundaries must not be inferred from older compression examples.
+诊断按公开格式和本地验证经验独立实现，无第三方运行依赖。监控与诊断在本机运行；点击 GitHub 时由浏览器访问仓库。
 
-Released under the repository's [MIT license](../LICENSE). Bundled runtime notices are included in the portable ZIP.
+## 配置、构建与验收
+
+偏好在 `%LOCALAPPDATA%\CodexSessionMonitor\settings.json`。保留旧版阈值与隐私偏好；数据目录更改下次启动生效。优先用环境变量 `CODEX_HOME`，否则 `%USERPROFILE%\.codex`。
+
+进入源码目录运行 `python app.py`；测试 `python -B -m unittest test_monitor_core test_usage_tracking test_integration test_ui_v11 test_agent_api`。Windows 构建使用 Python 3.11，在源码目录创建 `.build-venv` 并安装 PyInstaller 后运行 `build.ps1`，同时生成窗口及控制台程序。错误日志在配置文件夹的 `monitor-errors.log`。
+
+本机验收记录位于源码工程 `qa/`。5000 会话基准用合成日志，不代表所有机器的 CPU；读取覆盖和本轮开销可在界面底部查看。

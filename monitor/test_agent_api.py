@@ -13,7 +13,7 @@ from agent_api import DEFAULT_BUDGET, diagnose_session, list_sessions, run_cli
 from optimization import build_plan
 
 
-SID = "12345678-1234-1234-1234-1234567890ab"
+SID = "1443c825-fcd4-5be2-9209-0f859be1d842"
 
 
 class AgentApiTests(unittest.TestCase):

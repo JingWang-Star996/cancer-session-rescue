@@ -1,4 +1,14 @@
-# Agent API 1.0
+# Codex 会话监控 1.1.1 · Agent API 1.0
+
+产品版本是 `1.1.1`，JSON 协议仍为 `schema_version=1.0`。先执行 `capabilities` 核对 `product_version`、`commands` 和能力边界，再按需调用 `list → diagnose → plan`。
+
+## 1.1.1 的 GUI 与 CLI 边界
+
+本版 GUI 新增可选的 60 秒输入、缓存、持久累计记录，以及简化模式的七种汇总范围。这些属于运行中的桌面采样器；CLI 仍只有 `capabilities/list/diagnose/plan` 四个命令，没有读取 GUI 私有 `usage.sqlite3`、持续 Token 订阅、简化模式汇总或自动调用模型的接口。不要把一次 `list` 返回的元数据或尚未建立基线的速率当成完整用量。需要持续观察时，在 GUI 设置中开启 Token 记录，并按需选择简化模式范围和指标。
+
+缓存 Token 属于输入 Token；缓存命中率使用有效配对的缓存输入之和除以输入之和。已记录累计不保证补齐旧日志计数重置，不代表账单。切勿把 GUI 的新增功能解释为 Agent API 的新增命令。
+
+## 调用与返回
 
 桌面配套文件夹提供 `codex-monitor-agent.exe`，无需 Python。源码入口为 `python agent_api.py capabilities`（Python 3.11 标准库）。将下方示例的 `python agent_api.py` 换成 `.\codex-monitor-agent.exe` 即可运行。`agent_api.diagnose_session(home, sid, privacy=False) -> dict` 与 `optimization.build_plan(home, sid, privacy=False) -> dict` 可直接调用。标准输出和错误输出均使用 UTF-8 JSON。
 

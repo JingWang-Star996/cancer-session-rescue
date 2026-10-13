@@ -146,7 +146,7 @@ def _eligible_images(record: dict) -> tuple[int, int]:
 
 
 def capabilities() -> dict:
-    return {"schema_version": SCHEMA_VERSION, "product_version": "1.0.0", "kind": "capabilities",
+    return {"schema_version": SCHEMA_VERSION, "product_version": "1.1.1", "kind": "capabilities",
             "commands": ["capabilities", "list", "diagnose", "plan"],
             "diagnosis_budget_bytes": DEFAULT_BUDGET,
             "diagnosis_budget_seconds": TIME_BUDGET, "max_line_bytes": MAX_LINE,

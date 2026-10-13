@@ -1,22 +1,35 @@
-# Codex 会话监控 1.0 与 cancer-session-rescue
+# Codex 会话监控 1.1.1 与 cancer-session-rescue
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-**Codex 会话监控 1.0** 是查看本机 Codex 会话的 Windows 桌面程序，可观察文件增长、进行有界诊断，并生成供人工或 Agent 审阅的任务包。它不改写会话日志、不执行修复、不自动调用模型，也不重启 Codex。
+**Codex 会话监控 1.1.1** 是查看本机 Codex 会话的 Windows 桌面程序，可观察文件增长、进行有界诊断，并生成供人工或 Agent 审阅的任务包。它不改写会话日志、不执行修复、不自动调用模型，也不重启 Codex。
 
-本仓库还包含原有的 **cancer-session-rescue（`csr`）v0.2.0** 命令行工具，用于 WorkBuddy、Codex 和通用 JSONL 日志。它的独立命令在明确使用 `--apply` 时可以改写文件；这不是监控器 1.0 的能力。
+本仓库还包含原有的 **cancer-session-rescue（`csr`）v0.2.0** 命令行工具，用于 WorkBuddy、Codex 和通用 JSONL 日志。它的独立命令在明确使用 `--apply` 时可以改写文件；这不是监控器 1.1.1 的能力。
 
 ## 下载 Windows 版监控器
 
-前往 [Monitor 1.0 Release](https://github.com/JingWang-Star996/cancer-session-rescue/releases/tag/monitor-v1.0.0) 下载：
+前往 [Monitor 1.1.1 Release](https://github.com/JingWang-Star996/cancer-session-rescue/releases/tag/monitor-v1.1.1) 下载：
 
 | 文件 | 用途 |
 |---|---|
-| `CodexSessionMonitor-1.0.0-windows-x64.zip` | 免安装便携包，含桌面程序与 `codex-monitor-agent.exe`；解压即可运行，无需安装 Python。 |
-| `CodexSessionMonitor-1.0.0.exe` | 独立的桌面图形程序；需要 Agent CLI 时请下载 ZIP。 |
+| `CodexSessionMonitor-1.1.1-windows-x64.zip` | 免安装便携包，含桌面程序与 `codex-monitor-agent.exe`；解压即可运行，无需安装 Python。 |
+| `CodexSessionMonitor-1.1.1.exe` | 独立的桌面图形程序；需要 Agent CLI 时请下载 ZIP。 |
 | `SHA256SUMS.txt` | 用于核对下载文件的 SHA-256。 |
 
-支持 Windows x64。将 ZIP 解压到可写文件夹，运行其中的图形程序；独立 EXE 可直接运行。程序优先读取 `CODEX_HOME`，否则使用当前用户的 `.codex` 目录。另见[中文版](docs/monitor-1.0-release.zh-CN.md)与[英文版](docs/monitor-1.0-release.md)发布说明。
+支持 Windows x64。将 ZIP 解压到可写文件夹，运行其中的图形程序；独立 EXE 可直接运行。程序优先读取 `CODEX_HOME`，否则使用当前用户的 `.codex` 目录。另见[中文版](docs/monitor-1.1.1-release.zh-CN.md)与[英文版](docs/monitor-1.1.1-release.md)发布说明。
+
+## 1.1.1 新增功能
+
+- **简化模式汇总范围：**保留单会话，并新增近 60 秒有输出、最近 24 小时、全部未归档、仅主会话、仅子会话、当前列表筛选、全目录（含归档）七种汇总。前五种汇总只含未归档会话；当前列表筛选按最新快照统计所有匹配页。
+- **自选指标与置顶：**例如选「全部未归档」＋「60 秒输出」＋置顶，就能用小窗观察整体输出。范围和单会话选择会保留，隐私开关同时作用于两种界面。Ctrl+M 切换简化模式，Ctrl+T 切换置顶。
+- **可选输入、缓存与累计记录：**在「设置 → Token 与简化模式」开启记录，默认关闭。开启后显示 60 秒输入、缓存输入、缓存命中率，以及已记录输入／输出／缓存累计。关闭后停止记录，已有记录保留。
+- **小窗口布局优化：**列表优先占用空间，详情按需展开，小窗自动收起概览卡片；保留采样间隔、巡检间隔和每页条数设置。
+
+汇总复用现有采样快照，不增加日志扫描；显示已知覆盖数量，部分数据标注「小计」，全未知显示 `—`。缓存命中率按有效配对的缓存输入合计除以输入合计计算，不平均各会话百分比。缓存是输入的一部分，不重复相加。
+
+累计首先采用尾部最新可用账务累计，再加入确认的增量。统计保存在 `%LOCALAPPDATA%/CodexSessionMonitor/usage.sqlite3`，只含会话 ID、计数与核对状态，不含正文、标题或图片。有界尾读无法补齐旧的计数重置；冷会话可能延迟。跨会话合计不去重共享历史，不能视为账户账单。60 秒是统计窗口，与设置中的 2–60 秒采样间隔不同；日志批量记账会造成延迟。
+
+Agent JSON 协议保持 1.0；CLI 未开放 GUI 私有累计库、持续订阅或简化模式汇总接口。完整边界见 [Agent 调用说明](docs/monitor-agent-api.md)。
 
 ## 快速上手
 
@@ -62,7 +75,7 @@ csr slim codex /path/to/rollout.jsonl --sanitize
 
 [提交 `44e68b0` 时的原 README](https://github.com/JingWang-Star996/cancer-session-rescue/blob/44e68b0/README.zh-CN.md) 保留了旧版案例与示例。其中的 `csr --apply` 示例只针对旧工具，不是监控器使用说明。
 
-监控器任务包不授权或执行 `csr --apply`。任何后续修复都须独立核查当前 Codex 运行状态、会话状态、源文件与索引备份，并通过原生接口读回历史。监控器 1.0 没有生产日志改写命令。
+监控器任务包不授权或执行 `csr --apply`。任何后续修复都须独立核查当前 Codex 运行状态、会话状态、源文件与索引备份，并通过原生接口读回历史。监控器 1.1.1 没有生产日志改写命令。
 
 ## 源码与许可
 

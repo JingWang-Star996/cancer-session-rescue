@@ -8,7 +8,7 @@ import unittest
 from monitor_core import MonitorEngine
 
 
-SID = "12345678-1234-1234-1234-1234567890ab"
+SID = "1443c825-fcd4-5be2-9209-0f859be1d842"
 
 
 def token(total, last=None):
@@ -131,7 +131,7 @@ class MonitorTests(unittest.TestCase):
 
     def test_new_file_and_archive_move_discovery(self):
         self.session()
-        other = "12345678-1234-1234-1234-1234567890ac"
+        other = "9b251463-2d56-56c1-86eb-2f07e8e9ea31"
         new = self.file.parent / f"rollout-2026-10-12T00-00-01-{other}.jsonl"
         append(new, token(200))
         rows = self.engine.poll()["sessions"]
@@ -186,7 +186,7 @@ class MonitorTests(unittest.TestCase):
 
     def test_new_file_first_token_and_malformed_json_records(self):
         self.session()
-        other = "12345678-1234-1234-1234-1234567890ac"
+        other = "9b251463-2d56-56c1-86eb-2f07e8e9ea31"
         new = self.file.parent / f"rollout-2026-10-12T00-00-01-{other}.jsonl"
         append(new, token(6, 6))
         rows = self.engine.poll()["sessions"]
@@ -200,7 +200,7 @@ class MonitorTests(unittest.TestCase):
 
     def test_file_created_before_first_poll_starts_at_zero(self):
         time.sleep(0.02)
-        other = "12345678-1234-1234-1234-1234567890ac"
+        other = "9b251463-2d56-56c1-86eb-2f07e8e9ea31"
         new = self.file.parent / f"rollout-2026-10-12T00-00-01-{other}.jsonl"
         append(new, token(9, 9))
         row = next(row for row in self.engine.poll()["sessions"] if row["id"] == other)
@@ -253,7 +253,7 @@ class MonitorTests(unittest.TestCase):
         self.assertEqual(engine.poll()["diagnostics"]["jsonl_read_bytes"], 0)
 
     def test_refresh_removes_missing_and_deduplicates_hardlink(self):
-        other = "12345678-1234-1234-1234-1234567890ac"
+        other = "9b251463-2d56-56c1-86eb-2f07e8e9ea31"
         alias = self.file.parent / f"rollout-2026-10-12T00-00-01-{other}.jsonl"
         os.link(self.file, alias)
         engine = MonitorEngine(self.home, clock=lambda: self.now)

@@ -15,6 +15,7 @@ import re
 import sqlite3
 import time
 from typing import Callable
+from usage_store import UsageStore
 
 
 _ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)
@@ -48,6 +49,12 @@ class _Session:
         self.coverage = "新文件从起始追踪" if new_file else "初始基线待读取"
         self.last_event = ""
         self.checked_at = 0.0
+        self.usage = None
+        self.usage_pending = True
+        self.usage_reset = False
+        self.usage_loaded = False
+        self.usage_tokens = deque()
+        self.usage_warning = ""
 
 
 class MonitorEngine:
@@ -66,7 +73,9 @@ class MonitorEngine:
                  sampling_interval: float = 5.0,
                  catalog_interval: float = 60.0,
                  max_cold_stats_per_poll: int = 64,
-                 max_hot_sessions: int = 32):
+                 max_hot_sessions: int = 32,
+                 usage_tracking_enabled: bool = False,
+                 usage_store_path: str | Path | None = None):
         self.home = Path(codex_home)
         self._started_wall_ns = time.time_ns()
         self.window = float(window_seconds)
@@ -94,6 +103,149 @@ class MonitorEngine:
         self._increment_cursor = 0
         self._errors: list[str] = []
         self._index: dict[str, str] = {}
+        self.usage_tracking_enabled = bool(usage_tracking_enabled)
+        default_store = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / ".local"))) / "CodexSessionMonitor" / "usage.sqlite3"
+        self.usage_store_path = Path(usage_store_path) if usage_store_path is not None else default_store
+        if self.usage_store_path.resolve().is_relative_to(self.home.resolve()):
+            raise ValueError("usage_store_path must be outside codex_home")
+        self._usage_store = UsageStore(self.usage_store_path)
+        self._usage_dirty = {}
+        self._usage_io_warning = ""
+
+    def set_usage_tracking(self, enabled: bool):
+        enabled = bool(enabled)
+        if enabled == self.usage_tracking_enabled:
+            return
+        self.usage_tracking_enabled = enabled
+        for item in self.sessions.values():
+            item.usage_pending = True
+            item.usage_tokens.clear()
+        if not enabled:
+            # Do not persist even pending records while disabled.
+            self._usage_dirty.clear()
+
+    def flush(self):
+        if not self.usage_tracking_enabled or not self._usage_dirty:
+            return
+        try:
+            self._usage_store.save(self._usage_dirty)
+            self._usage_dirty.clear()
+            self._usage_io_warning = ""
+            for item in self.sessions.values():
+                if item.usage and not item.usage.get("gap") and item.usage_warning.startswith("累计记录读取失败"):
+                    item.usage_warning = ""
+        except (OSError, sqlite3.Error, ValueError) as exc:
+            self._usage_io_warning = f"累计记录保存失败: {exc}"
+
+    def close(self):
+        self.flush()
+        try:
+            self._usage_store.close()
+        except sqlite3.Error as exc:
+            self._usage_io_warning = f"累计记录关闭失败: {exc}"
+
+    @staticmethod
+    def _usage_values(record):
+        if not isinstance(record, dict) or record.get("type") != "event_msg":
+            return None
+        payload = record.get("payload")
+        if not isinstance(payload, dict) or payload.get("type") != "token_count":
+            return None
+        info = payload.get("info")
+        usage = info.get("total_token_usage") if isinstance(info, dict) else None
+        if not isinstance(usage, dict):
+            return None
+        values = [usage.get(key) for key in ("input_tokens", "output_tokens", "cached_input_tokens")]
+        values = [v if type(v) is int and v >= 0 else None for v in values]
+        if values[0] is not None and values[2] is not None and values[2] > values[0]:
+            values[2] = None
+        return values if any(v is not None for v in values) else None
+
+    def _usage_event(self, item, values, now, *, baseline=False):
+        old = item.usage
+        identity = list(item.identity)
+        recent = list(old.get("recent", [])) if old is not None else []
+        if old is not None and old.get("identity") == identity and values in recent:
+            if baseline and (values != old["raw"] or item.usage_reset):
+                # A replayed tail and a genuine reset to an already-seen tuple
+                # cannot be distinguished. Preserve the confirmed high position.
+                item.usage_warning = "尾部账务曾记录；重放与同值重置无法区分，保留已确认基线，累计可能有缺口"
+                item.usage = {**old, "gap": True}
+                self._usage_dirty[item.id] = dict(item.usage)
+            item.usage_reset = False
+            return
+        reset = item.usage_reset or (old is not None and old.get("identity") != identity)
+        if old is not None:
+            reset = reset or any(a is not None and b is not None and b < a
+                                 for a, b in zip(old["raw"], values))
+        totals = list(values) if old is None else list(old["total"])
+        deltas = [None, None, None]
+        for n, value in enumerate(values):
+            previous = old["raw"][n] if old is not None else None
+            if old is not None and not reset and value is not None and previous is not None:
+                deltas[n] = value - previous
+                totals[n] = (totals[n] or 0) + deltas[n]
+            elif old is not None and value is not None and totals[n] is None and not reset:
+                totals[n] = value
+        missing = any(value is None for value in values)
+        restored = old is not None and any(a is None and b is not None and total is not None
+                                          for a, b, total in zip(old["raw"], values, old["total"]))
+        gap = bool(reset or missing or restored or (old and old.get("gap")))
+        if not gap:
+            item.usage_warning = ""
+        if missing:
+            item.usage_warning = "账务字段缺失或无效；缓存超过输入时按未知处理，累计存在连续性缺口"
+        elif restored:
+            item.usage_warning = "账务字段恢复；缺失期间用量无法确认，仅重建该字段基线，累计存在缺口"
+        if reset:
+            item.usage_warning = "日志截断、替换或账务下降；首笔仅重建基线，累计可能有缺口"
+        # Missing fields invalidate continuity instead of inventing zero deltas.
+        if values not in recent:
+            recent.append(list(values))
+        item.usage = {"raw": values, "total": totals, "identity": identity,
+                      "gap": gap, "recent": recent[-128:]}
+        item.usage_reset = False
+        if not baseline and old is not None and not reset:
+            item.usage_tokens.append((now, deltas))
+        if item.usage != old:
+            self._usage_dirty[item.id] = dict(item.usage)
+
+    def _usage_baseline(self, item, now, deadline, budget):
+        if not item.usage_pending or item.offset < item.size or budget <= 0 or time.perf_counter() >= deadline:
+            return 0
+        if not item.usage_loaded:
+            try:
+                item.usage = self._usage_store.load(item.id)
+            except (OSError, sqlite3.Error, ValueError) as exc:
+                item.usage_warning = f"累计记录读取失败: {exc}"
+            item.usage_loaded = True
+        cap = min(item.size, 64 * 1024, budget)
+        try:
+            with item.path.open("rb") as stream:
+                start = item.size - cap
+                stream.seek(start)
+                data = stream.read(cap)
+            complete = data.split(b"\n")[:-1]
+            if start and complete:
+                complete = complete[1:]
+            latest = None
+            for raw in complete:
+                try:
+                    values = self._usage_values(json.loads(raw))
+                    if values is not None:
+                        latest = values
+                except (UnicodeError, ValueError):
+                    continue
+            if latest is not None:
+                self._usage_event(item, latest, now, baseline=True)
+            else:
+                item.usage_warning = "初始尾部未找到完整账务；下一笔仅建立基线"
+                item.usage_reset = item.usage is not None
+            item.usage_pending = False
+            return len(data)
+        except OSError as exc:
+            item.usage_warning = f"账务尾部读取失败: {exc}"
+            return 0
 
     def _read_index(self):
         path = self.home / "session_index.jsonl"
@@ -221,6 +373,9 @@ class MonitorEngine:
         return stat_count
 
     def _reset_file(self, item: _Session, stat: os.stat_result):
+        item.usage_reset = True
+        item.usage_pending = True
+        item.usage_tokens.clear()
         item.identity = (stat.st_dev, stat.st_ino)
         item.size = stat.st_size
         item.mtime = stat.st_mtime
@@ -249,6 +404,10 @@ class MonitorEngine:
         if not isinstance(record, dict):
             item.warning = "遇到非对象 JSON 日志行，已跳过"
             return
+        if self.usage_tracking_enabled and not baseline and not item.usage_pending:
+            values = self._usage_values(record)
+            if values is not None:
+                self._usage_event(item, values, now)
         kind = record.get("type")
         payload = record.get("payload")
         if not isinstance(payload, dict):
@@ -516,6 +675,12 @@ class MonitorEngine:
             if progress == 0:
                 break
             active = next_active
+        if self.usage_tracking_enabled:
+            for item in hot:
+                if remaining <= 0 or time.perf_counter() >= deadline:
+                    break
+                remaining -= self._usage_baseline(item, now, deadline, remaining)
+            self.flush()
         read_bytes = self.max_bytes - remaining
         result = []
         for item in self.sessions.values():
@@ -523,6 +688,26 @@ class MonitorEngine:
             while item.tokens and item.tokens[0][0] <= cutoff:
                 item.tokens.popleft()
             token_sum = sum(v for _, v in item.tokens)
+            usage_fields = {"input_tokens_60s": None, "cached_input_tokens_60s": None,
+                            "cache_hit_ratio_60s": None, "total_input_tokens": None,
+                            "total_output_tokens": None, "total_cached_input_tokens": None,
+                            "usage_coverage": None, "usage_warning": None}
+            if self.usage_tracking_enabled:
+                while item.usage_tokens and item.usage_tokens[0][0] <= cutoff:
+                    item.usage_tokens.popleft()
+                if item.usage is not None:
+                    for n, field in ((0, "input_tokens_60s"), (2, "cached_input_tokens_60s")):
+                        rows = [values[n] for _, values in item.usage_tokens]
+                        if item.usage["raw"][n] is not None and all(v is not None for v in rows):
+                            usage_fields[field] = sum(rows)
+                    inp, cached = usage_fields["input_tokens_60s"], usage_fields["cached_input_tokens_60s"]
+                    if inp and cached is not None and cached <= inp:
+                        usage_fields["cache_hit_ratio_60s"] = cached / inp
+                    for n, field in enumerate(("total_input_tokens", "total_output_tokens", "total_cached_input_tokens")):
+                        usage_fields[field] = item.usage["total"][n]
+                usage_fields["usage_coverage"] = ("尾部最新账务累计加后续确认增量；无法补齐此前重置历史；重复账务保留最近128笔去重" +
+                    ("；累计存在覆盖缺口" if item.usage and item.usage.get("gap") else ""))
+                usage_fields["usage_warning"] = self._usage_io_warning or item.usage_warning
             output_tps = token_sum / self.window if item.total_output is not None else None
             item.history.append((now, output_tps))
             while item.history and item.history[0][0] < now - 300:
@@ -551,6 +736,8 @@ class MonitorEngine:
                            "size_bytes": item.size, "mtime": item.mtime, "activity_at": item.activity_at,
                            "growth_bps": item.growth_bps,
                            "output_tps": output_tps,
+                           "output_tokens_60s": token_sum if item.total_output is not None else None,
+                           **usage_fields,
                            "observed_output_tokens": item.observed,
                            "last_token_at": item.last_token_at,
                            "last_output_tokens": item.last_output_tokens,
